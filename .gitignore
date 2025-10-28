@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.sqlite3
+
+# 虛擬環境
+venv/
+env/
+
+# 日誌檔
+*.log
+
+# 系統檔
+.DS_Store
+Thumbs.db
+
+# IDE / 編輯器設定檔
+.vscode/
+.idea/
