@@ -12,3 +12,4 @@ httpx==0.28.1
 fastapi-cli==0.0.14
 typing-extensions==4.15.0
 mysql-connector-python==8.1.0
+passlib[bcrypt]==1.7.4
