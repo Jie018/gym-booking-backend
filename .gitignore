@@ -1,9 +1,11 @@
 # Python
 __pycache__/
-*.py[cod]
+*.pyc
 *.pyo
 *.pyd
-*.sqlite3
+*.env
+.venv/
+
 
 # 虛擬環境
 venv/
