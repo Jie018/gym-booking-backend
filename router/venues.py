@@ -1,5 +1,7 @@
 from fastapi import APIRouter
 from sqlalchemy.orm import relationship
+from database import get_db
+
 router = APIRouter()
 
 @router.get("/venues")

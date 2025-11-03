@@ -29,15 +29,27 @@ def is_valid_password(password: str) -> bool:
     return True
 
 # 資料庫連線函式
+# def get_db():
+#     return mysql.connector.connect(
+#         host=os.getenv("DB_HOST", "localhost"),
+#         user=os.getenv("DB_USER", "root"),
+#         password=os.getenv("DB_PASSWORD", "Aa001!school"),
+#         database=os.getenv("DB_NAME", "gym_booking")
+#     )
 def get_db():
-    return mysql.connector.connect(
-        host=os.getenv("DB_HOST", "localhost"),
-        user=os.getenv("DB_USER", "root"),
-        password=os.getenv("DB_PASSWORD", "Aa001!school"),
-        database=os.getenv("DB_NAME", "gym_booking")
-    )
-
-
+    try:
+        conn = mysql.connector.connect(
+            host=os.getenv("DB_HOST"),
+            user=os.getenv("DB_USER"),
+            password=os.getenv("DB_PASSWORD"),
+            database=os.getenv("DB_NAME")
+        )
+        logging.info("資料庫連線成功")
+        return conn
+    except Exception as e:
+        logging.error(f"資料庫連線失敗: {e}")
+        raise
+    
 # 查詢所有使用者
 @router.get("/users", operation_id="get_all_users")
 def get_users():
