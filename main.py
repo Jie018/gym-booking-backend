@@ -5,6 +5,7 @@ from database import engine, get_db
 from models import Base, User
 from router.users import router as users_router
 from router import booking, cms, available_slots, my_reservations
+from sqlalchemy import text
 
 # 建立資料表
 Base.metadata.create_all(bind=engine)
@@ -43,3 +44,11 @@ def get_user(user_id: int, db: Session = Depends(get_db)):
         "username": user.username,
         "email": user.email
     }
+
+@app.get("/test-db")
+def test_db_connection(db=Depends(get_db)):
+    try:
+        db.execute(text("SELECT 1"))
+        return {"message": "✅ 資料庫連線成功"}
+    except Exception as e:
+        return {"error": str(e)}
