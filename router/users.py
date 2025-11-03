@@ -1,8 +1,9 @@
-import re
+import re, os, mysql.connector
 import logging  # ⬅️ 加入 logging
 from fastapi import APIRouter, HTTPException, Form
 import mysql.connector
 from passlib.context import CryptContext
+
 
 # 設定 logging 格式
 logging.basicConfig(
@@ -30,11 +31,12 @@ def is_valid_password(password: str) -> bool:
 # 資料庫連線函式
 def get_db():
     return mysql.connector.connect(
-        host="localhost",
-        user="root",
-        password="Aa001!school",
-        database="gym_booking"
+        host=os.getenv("DB_HOST", "localhost"),
+        user=os.getenv("DB_USER", "root"),
+        password=os.getenv("DB_PASSWORD", "Aa001!school"),
+        database=os.getenv("DB_NAME", "gym_booking")
     )
+
 
 # 查詢所有使用者
 @router.get("/users", operation_id="get_all_users")
