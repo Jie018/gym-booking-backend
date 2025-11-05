@@ -164,6 +164,8 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 def is_valid_password(password: str) -> bool:
     if len(password) < 8:
         return False
+    if len(password.encode('utf-8')) > 72:  # 新增：最大 72 bytes
+        return False
     if not re.search(r"[A-Z]", password):  # 至少一個大寫
         return False
     if not re.search(r"[a-z]", password):  # 至少一個小寫
@@ -238,7 +240,7 @@ def register(
         logging.warning(f"註冊失敗：帳號 {username} 已存在")
         raise HTTPException(status_code=400, detail="帳號已存在")
 
-    hashed_password = pwd_context.hash(password)
+    hashed_password = pwd_context.hash(password[:72])
     new_user = User(username=username, password=hashed_password, email=email)
     db.add(new_user)
     db.commit()
