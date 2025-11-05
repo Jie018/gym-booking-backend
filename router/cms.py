@@ -1,28 +1,3 @@
-# from fastapi import APIRouter, Form, HTTPException, Depends
-# from sqlalchemy.orm import Session
-# from database import get_db
-# from models import Reservation, BookingStatus
-
-# router = APIRouter(prefix="/cms", tags=["cms"])
-
-# @router.get("/pending_reservations")
-# def get_pending_reservations(db: Session = Depends(get_db)):
-#     return db.query(Reservation).filter(Reservation.status == BookingStatus.pending).all()
-
-# @router.post("/review_reservation")
-# def review_reservation(
-#     reservation_id: int = Form(...),
-#     decision: str = Form(...),
-#     db: Session = Depends(get_db)
-# ):
-#     if decision not in ["approved", "rejected"]:
-#         raise HTTPException(status_code=400, detail="無效的審核狀態")
-#     reservation = db.query(Reservation).filter(Reservation.id == reservation_id).first()
-#     if not reservation:
-#         raise HTTPException(status_code=404, detail="預約不存在")
-#     reservation.status = BookingStatus(decision)
-#     db.commit()
-#     return {"message": f"預約 {decision} 成功"}
 from fastapi import APIRouter, Form, HTTPException, Depends
 from sqlalchemy.orm import Session
 from database import get_db
