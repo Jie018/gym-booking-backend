@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from database import engine, get_db
+from database import engine, get_db, test_connection
 from models import Base, User
 from router.users import router as users_router
 from router import booking, cms, available_slots, my_reservations
@@ -46,9 +46,9 @@ def get_user(user_id: int, db: Session = Depends(get_db)):
     }
 
 @app.get("/test-db")
-def test_db_connection(db=Depends(get_db)):
+def test_db_connection():
     try:
-        db.execute(text("SELECT 1"))
+        test_connection()  # 用統一方法測試引擎
         return {"message": "✅ 資料庫連線成功"}
     except Exception as e:
         return {"error": str(e)}
