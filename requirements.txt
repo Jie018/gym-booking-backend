@@ -1,3 +1,20 @@
+# fastapi==0.111.1
+# uvicorn[standard]==0.23.2
+# sqlalchemy==2.0.22
+# mysql-connector-python==8.1.0
+# pydantic==2.7.4
+# python-dotenv==1.0.0
+# alembic==1.12.0
+# python-multipart==0.0.20
+# email-validator==2.3.0
+# jinja2==3.1.6
+# httpx==0.28.1
+# fastapi-cli==0.0.14
+# typing-extensions==4.15.0
+# bcrypt>=4.0.0
+# passlib>=1.7.4
+# psycopg2-binary==2.9.9
+
 fastapi==0.111.1
 uvicorn[standard]==0.23.2
 sqlalchemy==2.0.22
@@ -11,6 +28,10 @@ jinja2==3.1.6
 httpx==0.28.1
 fastapi-cli==0.0.14
 typing-extensions==4.15.0
-bcrypt>=4.0.0
-passlib>=1.7.4
+
+# ✅ 關鍵修正：bcrypt 與 passlib 指定確切版本避免版本不符
+bcrypt==4.1.2
+passlib==1.7.4
+
+# ⚠️ 若未使用 PostgreSQL，可刪除 psycopg2-binary，否則保留
 psycopg2-binary==2.9.9
