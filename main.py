@@ -15,7 +15,7 @@ app = FastAPI()
 # CORS 設定
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["https://easycourt-booking.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -42,74 +42,83 @@ def get_my_bookings(user_id: int, db: Session = Depends(get_db)):
 
 @router.post("/book")
 def create_booking(data: BookingCreate, db: Session = Depends(get_db)):
-    # 0) 檢查 user / venue 存不存在
-    if not db.query(User).filter(User.id == data.user_id).first():
-        raise HTTPException(status_code=404, detail="User not found")
-    if not db.query(Venue).filter(Venue.id == data.venue_id).first():
-        raise HTTPException(status_code=404, detail="Venue not found")
-
-    # 1) 解析時間字串成 datetime
     try:
-        start_dt = datetime.strptime(f"{data.date} {data.time_slots[0]}:00", "%Y-%m-%d %H:%M:%S")
-        end_dt   = datetime.strptime(f"{data.date} {data.time_slots[1]}:00", "%Y-%m-%d %H:%M:%S")
-    except ValueError:
-        raise HTTPException(status_code=400, detail="時間格式錯誤（需 YYYY-MM-DD 與 HH:MM）")
+        # 0) 檢查 user / venue 存不存在
+        if not db.query(User).filter(User.id == data.user_id).first():
+            raise HTTPException(status_code=404, detail="User not found")
+        if not db.query(Venue).filter(Venue.id == data.venue_id).first():
+            raise HTTPException(status_code=404, detail="Venue not found")
 
-    if end_dt <= start_dt:
-        raise HTTPException(status_code=400, detail="結束時間需晚於開始時間")
+        # 1) 解析時間字串成 datetime
+        try:
+            start_dt = datetime.strptime(f"{data.date} {data.time_slots[0]}:00", "%Y-%m-%d %H:%M:%S")
+            end_dt   = datetime.strptime(f"{data.date} {data.time_slots[1]}:00", "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="時間格式錯誤（需 YYYY-MM-DD 與 HH:MM）")
 
-    # 2) 學號數量檢查
-    student_ids_clean = [s.strip() for s in data.student_ids if s.strip()]
-    if len(student_ids_clean) != data.people_count:
-        raise HTTPException(status_code=400, detail="學號數量需與人數一致")
+        if end_dt <= start_dt:
+            raise HTTPException(status_code=400, detail="結束時間需晚於開始時間")
 
-    # 3) 確認在可預約時段內（AvailableSlot）
-    slot_ok = db.query(AvailableSlot).filter(
-        AvailableSlot.venue_id == data.venue_id,
-        AvailableSlot.start_time <= start_dt,
-        AvailableSlot.end_time >= end_dt
-    ).first()
-    if not slot_ok:
-        raise HTTPException(status_code=400, detail="所選時間段不在可預約時段內")
-    # 4a) 同 user 跨場地衝突檢查
-    # user_conflict = db.query(Booking).filter(
-    #     Booking.user_id == data.user_id,
-    #     Booking.start_time < end_dt,
-    #     Booking.end_time > start_dt,
-    #     Booking.status != BookingStatus.failed
-    # ).first()
-    # if user_conflict:
-    #     raise HTTPException(status_code=409, detail="您在此時間段已經有其他場地的預約")
-    # 4) 與既有預約衝突檢查（同場地，用 Booking 表）
-    conflict = db.query(Booking).filter(
-        Booking.venue_id == data.venue_id,
-        Booking.start_time < end_dt,
-        Booking.end_time > start_dt
-    ).first()
-    if conflict:
-        raise HTTPException(status_code=409, detail="該時段已被預約")
+        # 2) 學號數量檢查
+        student_ids_clean = [s.strip() for s in data.student_ids if s.strip()]
+        if len(student_ids_clean) != data.people_count:
+            raise HTTPException(status_code=400, detail="學號數量需與人數一致")
 
-    # 5) 建立 booking
-    new_b = Booking(
-        user_id=data.user_id,
-        venue_id=data.venue_id,
-        start_time=start_dt,
-        end_time=end_dt,
-        contact_phone=data.contact_phone,
-        people_count=data.people_count,
-        student_ids=",".join(student_ids_clean),
-        status=BookingStatus.pending
-    )
-    db.add(new_b)
-    db.commit()
-    db.refresh(new_b)
+        # 3) 確認在可預約時段內（AvailableSlot）
+        slot_ok = db.query(AvailableSlot).filter(
+            AvailableSlot.venue_id == data.venue_id,
+            AvailableSlot.start_time <= start_dt,
+            AvailableSlot.end_time >= end_dt
+        ).first()
+        if not slot_ok:
+            raise HTTPException(status_code=400, detail="所選時間段不在可預約時段內")
+        # 4a) 同 user 跨場地衝突檢查
+        # user_conflict = db.query(Booking).filter(
+        #     Booking.user_id == data.user_id,
+        #     Booking.start_time < end_dt,
+        #     Booking.end_time > start_dt,
+        #     Booking.status != BookingStatus.failed
+        # ).first()
+        # if user_conflict:
+        #     raise HTTPException(status_code=409, detail="您在此時間段已經有其他場地的預約")
+        # 4) 與既有預約衝突檢查（同場地，用 Booking 表）
+        conflict = db.query(Booking).filter(
+            Booking.venue_id == data.venue_id,
+            Booking.start_time < end_dt,
+            Booking.end_time > start_dt
+        ).first()
+        if conflict:
+            raise HTTPException(status_code=409, detail="該時段已被預約")
 
-    return {
-        "success": True,
-        "message": "預約成功",
-        "booking_id": new_b.id,
-        "status": new_b.status.value
-    }
+        # 5) 建立 booking
+        new_b = Booking(
+            user_id=data.user_id,
+            venue_id=data.venue_id,
+            start_time=start_dt,
+            end_time=end_dt,
+            contact_phone=data.contact_phone,
+            people_count=data.people_count,
+            student_ids=",".join(student_ids_clean),
+            status=BookingStatus.pending
+        )
+        db.add(new_b)
+        db.commit()
+        db.refresh(new_b)
+
+        return {
+            "success": True,
+            "message": "預約成功",
+            "booking_id": new_b.id,
+            "status": new_b.status.value
+        }
+    except HTTPException:
+        # 已經是明確的 HTTPException，直接丟出
+        raise
+    except Exception as e:
+        # 捕捉所有其他錯誤，方便除錯
+        print("❌ 500 Error:", e)
+        raise HTTPException(status_code=500, detail=str(e))
+    
 # ---------------------------
 # 更新預約狀態（管理員用）
 # ---------------------------
