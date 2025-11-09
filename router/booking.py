@@ -71,8 +71,16 @@ def create_booking(data: BookingCreate, db: Session = Depends(get_db)):
     ).first()
     if not slot_ok:
         raise HTTPException(status_code=400, detail="所選時間段不在可預約時段內")
-
-    # 4) 與既有預約衝突檢查（同場地，用 Booking 表）
+    # 4a) 同 user 跨場地衝突檢查
+    user_conflict = db.query(Booking).filter(
+        Booking.user_id == data.user_id,
+        Booking.start_time < end_dt,
+        Booking.end_time > start_dt,
+        Booking.status != BookingStatus.failed
+    ).first()
+    if user_conflict:
+        raise HTTPException(status_code=409, detail="您在此時間段已經有其他場地的預約")
+    # 4b) 與既有預約衝突檢查（同場地，用 Booking 表）
     conflict = db.query(Booking).filter(
         Booking.venue_id == data.venue_id,
         Booking.start_time < end_dt,
