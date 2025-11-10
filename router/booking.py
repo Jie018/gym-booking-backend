@@ -78,15 +78,16 @@ def create_booking(data: BookingCreate, db: Session = Depends(get_db)):
             Booking.user_id == data.user_id,
             Booking.start_time < end_dt,
             Booking.end_time > start_dt,
-            # Booking.status != BookingStatus.failed
+            Booking.status != BookingStatus.cancelled
         ).first()
         if user_conflict:
             raise HTTPException(status_code=409, detail="您在此時間段已經有其他場地的預約")
-        # 4) 與既有預約衝突檢查（同場地，用 Booking 表）
+        # 4b) 與既有預約衝突檢查（同場地，用 Booking 表）
         conflict = db.query(Booking).filter(
             Booking.venue_id == data.venue_id,
             Booking.start_time < end_dt,
-            Booking.end_time > start_dt
+            Booking.end_time > start_dt,
+            Booking.status != BookingStatus.cancelled
         ).first()
         if conflict:
             raise HTTPException(status_code=409, detail="該時段已被預約")
@@ -130,10 +131,11 @@ def update_booking_status(booking_id: int, status: str, db: Session = Depends(ge
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
     # booking.status = status
-        try:
-            booking.status = BookingStatus(status)
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid status value")
+    try:
+        booking.status = BookingStatus(status)
+    except ValueError:
+        print(f"❌ Invalid status value received: {status}")
+        raise HTTPException(status_code=400, detail="Invalid status value")
         
     db.commit()
     db.refresh(booking)
@@ -221,7 +223,7 @@ def get_pending_bookings(db: Session = Depends(get_db)):
             "contact_phone": b.contact_phone,
             "student_ids": b.student_ids,             # 新增欄位
             "created_at": b.created_at.isoformat(),   # 新增欄位
-            "status": "審核中"                # 前端顯示文字
+            "status": b.status.value
         })
     
     return {"bookings": result}
