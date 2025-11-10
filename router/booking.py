@@ -78,7 +78,7 @@ def create_booking(data: BookingCreate, db: Session = Depends(get_db)):
             Booking.user_id == data.user_id,
             Booking.start_time < end_dt,
             Booking.end_time > start_dt,
-            Booking.status != BookingStatus.failed
+            # Booking.status != BookingStatus.failed
         ).first()
         if user_conflict:
             raise HTTPException(status_code=409, detail="您在此時間段已經有其他場地的預約")
