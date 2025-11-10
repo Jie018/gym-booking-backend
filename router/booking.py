@@ -6,6 +6,7 @@ from models import Booking, User, Venue, AvailableSlot, BookingStatus
 from pydantic import BaseModel, validator
 from schemas import BookingOut
 from datetime import datetime
+import traceback
 
 router = APIRouter()
 
@@ -117,6 +118,7 @@ def create_booking(data: BookingCreate, db: Session = Depends(get_db)):
     except Exception as e:
         # 捕捉所有其他錯誤，方便除錯
         print("❌ 500 Error:", e)
+        traceback.print_exc()  
         raise HTTPException(status_code=500, detail=str(e))
     
 # ---------------------------
