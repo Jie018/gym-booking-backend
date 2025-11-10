@@ -8,10 +8,10 @@ from sqlalchemy.sql import func
 
 
 class BookingStatus(str, enum.Enum):
-    pending = "審核中"       # 審核中
-    approved = "預約成功"     # 預約成功
-    rejected = "預約失敗"     # 預約失敗
-    cancelled = "已取消"   # 已取消
+    pending = "pending"        # 審核中
+    approved = "approved"      # 預約成功
+    rejected = "rejected"      # 預約失敗
+    cancelled = "cancelled"    # 已取消
 
 
 class User(Base):
