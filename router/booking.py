@@ -66,15 +66,10 @@ def create_booking(data: BookingCreate, db: Session = Depends(get_db)):
             raise HTTPException(status_code=400, detail="學號數量需與人數一致")
 
         # 3) 確認在可預約時段內（AvailableSlot）
-        # slot_ok = db.query(AvailableSlot).filter(
-        #     AvailableSlot.venue_id == data.venue_id,
-        #     AvailableSlot.start_time <= start_dt,
-        #     AvailableSlot.end_time >= end_dt
-        # ).first()
         slot_ok = db.query(AvailableSlot).filter(
             AvailableSlot.venue_id == data.venue_id,
-            AvailableSlot.start_time.time() <= start_dt.time(),
-            AvailableSlot.end_time.time() >= end_dt.time()
+            AvailableSlot.start_time <= start_dt,
+            AvailableSlot.end_time >= end_dt
         ).first()
         if not slot_ok:
             raise HTTPException(status_code=400, detail="所選時間段不在可預約時段內")
