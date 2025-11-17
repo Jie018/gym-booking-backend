@@ -35,3 +35,6 @@ passlib==1.7.4
 
 # ⚠️ 若未使用 PostgreSQL，可刪除 psycopg2-binary，否則保留
 psycopg2-binary==2.9.9
+
+#訊息郵件寄送
+sendgrid>=6.9.7
