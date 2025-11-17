@@ -11,6 +11,9 @@ __pycache__/
 venv/
 env/
 
+# 環境變數
+.env
+
 # 日誌檔
 *.log
 
