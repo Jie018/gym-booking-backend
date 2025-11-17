@@ -6,7 +6,10 @@ import psycopg2
 import psycopg2.extras
 from linebot import LineBotApi, WebhookParser
 from linebot.exceptions import InvalidSignatureError
-from linebot.models import MessageEvent, TextMessage, TextSendMessage, QuickReply, QuickReplyButton, MessageAction
+from linebot.models import (
+    MessageEvent, TextMessage, TextSendMessage,
+    QuickReply, QuickReplyButton, MessageAction
+)
 from datetime import datetime
 
 router = APIRouter()
@@ -29,9 +32,6 @@ if not (LINE_CHANNEL_SECRET and LINE_CHANNEL_ACCESS_TOKEN):
 # LINE SDK 初始化
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 parser = WebhookParser(LINE_CHANNEL_SECRET)
-
-# ---------- 使用者暫存狀態 ----------
-user_state = {}  # user_id -> {"status": None, "selected_venue": None}
 
 # ---------- DB helper ----------
 def get_db_connection():
@@ -65,6 +65,22 @@ def get_all_venues():
     cur.close()
     conn.close()
     return [{"id": r["id"], "name": r["name"]} for r in rows]
+
+# ---------- helper: 所有場地名稱 ----------
+def get_all_venue_names():
+    return [v["name"] for v in get_all_venues()]
+
+# ---------- helper: 建立 QuickReply 按鈕 ----------
+def get_quickreply_for_venues():
+    venues = get_all_venues()
+    buttons = []
+    for v in venues:
+        buttons.append(
+            QuickReplyButton(
+                action=MessageAction(label=v["name"], text=v["name"])
+            )
+        )
+    return QuickReply(items=buttons)
 
 # ---------- API: 查詢目前有開放的場地 ----------
 @router.get("/api/opened_venues")
@@ -133,32 +149,36 @@ async def callback(request: Request):
             user_text = event.message.text.strip()
             reply_text = "請使用下方選單快速查詢：可預約時段 / 目前有開放的場地嗎"
 
-            # ----------- 可預約時段二階段邏輯 -----------
+            # ----------- 可預約時段二階段 QuickReply -----------
             if user_text == "可預約時段":
                 try:
-                    # 第一步：列出所有開放場地讓使用者選
-                    conn = get_db_connection()
-                    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-                    cur.execute("SELECT id, name FROM venues ORDER BY id;")
-                    rows = cur.fetchall()
-                    cur.close()
-                    conn.close()
-
-                    if not rows:
-                        reply_text = "目前沒有開放的場地。"
-                    else:
-                        text_lines = ["請先選擇場地（回覆編號即可）："]
-                        for r in rows:
-                            text_lines.append(f"{r['id']}️⃣ {r['name']}")
-                        reply_text = "\n".join(text_lines)
+                    quickreply = get_quickreply_for_venues()
+                    line_bot_api.reply_message(
+                        event.reply_token,
+                        TextSendMessage(
+                            text="請先選擇場地：",
+                            quick_reply=quickreply
+                        )
+                    )
+                    continue  # 不執行後續 reply_text
                 except Exception as e:
                     reply_text = f"查詢時發生錯誤：{e}"
 
-            # 使用者回覆場地編號
-            elif user_text.isdigit():
+            # 使用者回覆場地名稱
+            elif user_text in get_all_venue_names():
                 try:
-                    venue_id = int(user_text)
-                    reply_text = get_slots_text_for_venue(venue_id)
+                    venue_name = user_text
+                    conn = get_db_connection()
+                    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+                    cur.execute("SELECT id FROM venues WHERE name = %s;", (venue_name,))
+                    v = cur.fetchone()
+                    cur.close()
+                    conn.close()
+                    if not v:
+                        reply_text = "查無該場地。"
+                    else:
+                        venue_id = v["id"]
+                        reply_text = get_slots_text_for_venue(venue_id)
                 except Exception as e:
                     reply_text = f"查詢時發生錯誤：{e}"
 
