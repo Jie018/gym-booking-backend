@@ -168,14 +168,14 @@ def get_open_venues_text():
     if not rows:
         return "目前沒有開放的場地。"
 
-    text_lines = ["📌 目前場地概況："]
+    text_lines = ["🔹 目前場地概況："]
 
     for r in rows:
-        status = "🟢 開放" if r["is_open"] else "🔴 關閉 / 維護中"
+        status = "💚🌱 開放" if r["is_open"] else "❤️‍🩹🛠️ 關閉 / 維護中"
         text_lines.append(
-            f"• {r['name']}（容量 {r['capacity']} 人）\n"
+            f"• {r['name']}（一場人數 {r['capacity']} 人）\n"
             f"  {status}\n"
-            f"  📄 備註：{r['remarks']}"
+            f"  🧾 備註：{r['remarks']}"
         )
 
     cur.close()
@@ -209,7 +209,7 @@ def get_all_slots_text():
     for r in rows:
         if r["venue_name"] != current_venue:
             current_venue = r["venue_name"]
-            text_lines.append(f"\n🏟 {current_venue}")
+            text_lines.append(f"\n🏟️ {current_venue}")
         text_lines.append(f" - {format_time(r['start_time'])} ～ {format_time(r['end_time'])}")
 
     cur.close()
@@ -243,9 +243,9 @@ def get_slots_text_for_venue(venue_id: int):
 
     rows = cur.fetchall()
     if not rows:
-        return f"🏟 {venue_name}\n目前沒有可預約時段。"
+        return f"🏟️ {venue_name}\n目前沒有可預約時段。"
 
-    lines = [f"🏟 {venue_name} - 可預約時段："]
+    lines = [f"🏟️ {venue_name} - 可預約時段："]
     for r in rows:
         lines.append(f"• {format_time(r['start_time'])} ～ {format_time(r['end_time'])}")
 
