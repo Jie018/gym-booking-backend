@@ -1,11 +1,13 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from database import engine, get_db, test_connection
+from database import engine, get_db, test_connection, Base
 from models import Base, User
 from router.users import router as users_router
 from router import booking, cms, available_slots, my_reservations
 from sqlalchemy import text
+from line_integration import router as line_router
+
 
 # 建立資料表
 Base.metadata.create_all(bind=engine)
@@ -28,6 +30,7 @@ app.include_router(cms.router)
 app.include_router(available_slots.router, prefix="/api")
 app.include_router(booking.router, prefix="/api")
 app.include_router(my_reservations.router, prefix="/api")
+app.include_router(line_router, prefix="/api/line")    # LINE Bot
 
 
 @app.get("/")
