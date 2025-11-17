@@ -2,12 +2,12 @@
 import os
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import PlainTextResponse, JSONResponse
-from datetime import datetime
 import psycopg2
 import psycopg2.extras
 from linebot import LineBotApi, WebhookParser
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage
+from datetime import datetime
 
 router = APIRouter()
 
@@ -72,27 +72,25 @@ def api_available_slots(venue_id: int):
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-
-        # 取場地名稱
         cur.execute("SELECT name FROM venues WHERE id = %s;", (venue_id,))
         v = cur.fetchone()
         if not v:
             cur.close()
             conn.close()
             raise HTTPException(status_code=404, detail="Venue not found")
-        venue_name = v["name"]
 
-        # 取 available_slots，排除已過去的時間
+        venue_name = v["name"]
+        today = datetime.now()
+
         cur.execute("""
             SELECT s.start_time, s.end_time
             FROM available_slots s
             LEFT JOIN bookings b
-            ON s.id = b.slot_id
-            WHERE s.venue_id = %s
-            AND s.start_time >= NOW()
-            AND b.id IS NULL
+              ON s.venue_id = b.venue_id
+              AND s.start_time = b.start_time
+            WHERE s.venue_id = %s AND s.start_time >= %s AND b.id IS NULL
             ORDER BY s.start_time;
-        """, (venue_id,))
+        """, (venue_id, today))
         rows = cur.fetchall()
         slots = [{"start": format_time(r["start_time"]), "end": format_time(r["end_time"])} for r in rows]
 
@@ -172,14 +170,19 @@ def get_open_venues_text():
 def get_all_slots_text():
     conn = get_db_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    now = datetime.now()
+
     cur.execute("""
-        SELECT v.id AS venue_id, v.name AS venue_name, s.start_time, s.end_time
+        SELECT s.venue_id, v.name AS venue_name, s.start_time, s.end_time
         FROM available_slots s
-        LEFT JOIN bookings b ON s.id = b.slot_id
         JOIN venues v ON s.venue_id = v.id
-        WHERE s.start_time >= NOW() AND b.id IS NULL
+        LEFT JOIN bookings b 
+          ON s.venue_id = b.venue_id 
+          AND s.start_time = b.start_time
+        WHERE s.start_time >= %s AND b.id IS NULL
         ORDER BY v.id, s.start_time;
-    """)
+    """, (now,))
+    
     rows = cur.fetchall()
     if not rows:
         text = "目前沒有可預約時段。"
@@ -192,6 +195,7 @@ def get_all_slots_text():
                 text_lines.append(f"\n🏟 {current_venue}")
             text_lines.append(f" - {format_time(r['start_time'])} ～ {format_time(r['end_time'])}")
         text = "\n".join(text_lines)
+
     cur.close()
     conn.close()
     return text
@@ -199,6 +203,8 @@ def get_all_slots_text():
 def get_slots_text_for_venue(venue_id: int):
     conn = get_db_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    now = datetime.now()
+
     cur.execute("SELECT name FROM venues WHERE id = %s;", (venue_id,))
     v = cur.fetchone()
     if not v:
@@ -210,10 +216,12 @@ def get_slots_text_for_venue(venue_id: int):
     cur.execute("""
         SELECT s.start_time, s.end_time
         FROM available_slots s
-        LEFT JOIN bookings b ON s.id = b.slot_id
-        WHERE s.venue_id = %s AND s.start_time >= NOW() AND b.id IS NULL
+        LEFT JOIN bookings b
+          ON s.venue_id = b.venue_id
+          AND s.start_time = b.start_time
+        WHERE s.venue_id = %s AND s.start_time >= %s AND b.id IS NULL
         ORDER BY s.start_time;
-    """, (venue_id,))
+    """, (venue_id, now))
     rows = cur.fetchall()
     if not rows:
         text = f"🏟 {venue_name}\n目前沒有可預約時段。"
