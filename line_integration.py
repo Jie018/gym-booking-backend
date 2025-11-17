@@ -126,11 +126,12 @@ async def callback(request: Request):
                 except Exception as e:
                     reply_text = f"查詢時發生錯誤：{e}"
 
-            elif user_text == "目前有開放的場地嗎":
-                try:
-                    reply_text = get_open_venues_text()
-                except Exception as e:
-                    reply_text = f"查詢時發生錯誤：{e}"
+            elif user_text in ["目前有開放的場地嗎", "目前有開放的場地嗎?", "目前有開放的場地嗎？"] \
+                    or "目前有開放的場地" in user_text:
+                    try:
+                        reply_text = get_open_venues_text()
+                    except Exception as e:
+                        reply_text = f"查詢時發生錯誤：{e}"
 
             elif user_text.startswith("available:"):
                 try:
