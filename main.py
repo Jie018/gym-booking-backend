@@ -7,6 +7,10 @@ from router.users import router as users_router
 from router import booking, cms, available_slots, my_reservations
 from sqlalchemy import text
 from line_integration import router as line_router
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
+from pathlib import Path
+import json
 
 
 # 建立資料表
@@ -55,3 +59,12 @@ def test_db_connection():
         return {"message": "✅ 資料庫連線成功"}
     except Exception as e:
         return {"error": str(e)}
+    
+# 提供 /api/news 路由讀取最新新聞 JSON
+@app.get("/api/news")
+def get_news():
+    file_path = Path("data/latest_news.json")
+    if file_path.exists():
+        with open(file_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {"news": []}
