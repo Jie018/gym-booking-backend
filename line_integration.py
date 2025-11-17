@@ -131,39 +131,38 @@ async def callback(request: Request):
     for event in events:
         if event.type == "message" and event.message.type == "text":
             user_text = event.message.text.strip()
-            user_id = event.source.user_id
             reply_text = "請使用下方選單快速查詢：可預約時段 / 目前有開放的場地嗎"
 
-            # ---------- 可預約時段二段式 ----------
+            # ----------- 可預約時段二階段邏輯 -----------
             if user_text == "可預約時段":
-                user_state[user_id] = {"status": "awaiting_venue_selection", "selected_venue": None}
-                venues = get_all_venues()
-                quick_buttons = [
-                    QuickReplyButton(action=MessageAction(label=v["name"], text=f"venue:{v['id']}"))
-                    for v in venues
-                ]
                 try:
-                    line_bot_api.reply_message(
-                        event.reply_token,
-                        TextSendMessage(
-                            text="請先選擇一個場地",
-                            quick_reply=QuickReply(items=quick_buttons)
-                        )
-                    )
+                    # 第一步：列出所有開放場地讓使用者選
+                    conn = get_db_connection()
+                    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+                    cur.execute("SELECT id, name FROM venues ORDER BY id;")
+                    rows = cur.fetchall()
+                    cur.close()
+                    conn.close()
+
+                    if not rows:
+                        reply_text = "目前沒有開放的場地。"
+                    else:
+                        text_lines = ["請先選擇場地（回覆編號即可）："]
+                        for r in rows:
+                            text_lines.append(f"{r['id']}️⃣ {r['name']}")
+                        reply_text = "\n".join(text_lines)
                 except Exception as e:
-                    print("LINE reply error:", e)
-                continue
+                    reply_text = f"查詢時發生錯誤：{e}"
 
-            if user_state.get(user_id, {}).get("status") == "awaiting_venue_selection":
-                if user_text.startswith("venue:"):
-                    venue_id = int(user_text.split(":")[1])
-                    user_state[user_id]["status"] = "ready_to_show_slots"
-                    user_state[user_id]["selected_venue"] = venue_id
+            # 使用者回覆場地編號
+            elif user_text.isdigit():
+                try:
+                    venue_id = int(user_text)
                     reply_text = get_slots_text_for_venue(venue_id)
-                else:
-                    reply_text = "請選擇場地後再查詢可預約時段"
+                except Exception as e:
+                    reply_text = f"查詢時發生錯誤：{e}"
 
-            # ---------- 其他原有訊息 ----------
+            # ----------- 目前有開放的場地 -----------
             elif user_text in ["目前有開放的場地嗎", "目前有開放的場地嗎?", "目前有開放的場地嗎？"] \
                     or "目前有開放的場地" in user_text:
                 try:
@@ -171,6 +170,7 @@ async def callback(request: Request):
                 except Exception as e:
                     reply_text = f"查詢時發生錯誤：{e}"
 
+            # ----------- 指定場地時段 -----------
             elif user_text.startswith("available:"):
                 try:
                     _, vid = user_text.split(":", 1)
@@ -179,6 +179,7 @@ async def callback(request: Request):
                 except:
                     reply_text = "參數格式錯誤，請傳 available:<venue_id>（例如 available:4）"
 
+            # 回覆 LINE
             try:
                 line_bot_api.reply_message(
                     event.reply_token,
@@ -188,6 +189,7 @@ async def callback(request: Request):
                 print("LINE reply error:", e)
 
     return "OK"
+
 
 # ---------- helper: 開放場地查詢 ----------
 def get_open_venues_text():
