@@ -11,6 +11,8 @@ from datetime import datetime
 
 router = APIRouter()
 
+now = datetime.now()
+
 # ---------- 從環境變數讀設定 ----------
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
@@ -80,6 +82,7 @@ def api_available_slots(venue_id: int):
             raise HTTPException(status_code=404, detail="Venue not found")
 
         venue_name = v["name"]
+        today = datetime.now().date()
 
         cur.execute("""
             SELECT s.start_time, s.end_time
@@ -87,17 +90,15 @@ def api_available_slots(venue_id: int):
             LEFT JOIN bookings b
               ON s.venue_id = b.venue_id
               AND s.start_time = b.start_time
-            WHERE s.venue_id = %s AND s.start_time >= NOW() AND b.id IS NULL
+            WHERE s.venue_id = %s AND s.start_time::date >= %s AND b.id IS NULL
             ORDER BY s.start_time;
-        """, (venue_id,))
+        """, (venue_id, today))
         rows = cur.fetchall()
         slots = [{"start": format_time(r["start_time"]), "end": format_time(r["end_time"])} for r in rows]
 
         cur.close()
         conn.close()
         return JSONResponse({"venue": venue_name, "slots": slots})
-    except HTTPException:
-        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -117,7 +118,7 @@ async def callback(request: Request):
     for event in events:
         if event.type == "message" and event.message.type == "text":
             user_text = event.message.text.strip()
-            reply_text = "請使用下方選單快速查詢：可預約時段"
+            reply_text = "請使用下方選單快速查詢：可預約時段 / 目前有開放的場地嗎"
 
             if user_text == "可預約時段":
                 try:
@@ -136,7 +137,7 @@ async def callback(request: Request):
                     _, vid = user_text.split(":", 1)
                     vid = int(vid)
                     reply_text = get_slots_text_for_venue(vid)
-                except Exception as e:
+                except:
                     reply_text = "參數格式錯誤，請傳 available:<venue_id>（例如 available:4）"
 
             try:
@@ -149,26 +150,42 @@ async def callback(request: Request):
 
     return "OK"
 
-# ---------- helper functions ----------
+# ---------- helper: 開放場地查詢（已新增資訊） ----------
 def get_open_venues_text():
     conn = get_db_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cur.execute("SELECT id, name, capacity FROM venues ORDER BY id;")
+
+    cur.execute("""
+        SELECT id, name, capacity,
+               COALESCE(remarks, '無特殊備註') AS remarks,
+               COALESCE(is_open, TRUE) AS is_open
+        FROM venues
+        ORDER BY id;
+    """)
     rows = cur.fetchall()
+
     if not rows:
-        text = "目前沒有開放的場地。"
-    else:
-        text_lines = ["📌 目前開放的場地："]
-        for r in rows:
-            text_lines.append(f"• {r['name']}（容量 {r['capacity']} 人） — 請點選下方選單查詢時段")
-        text = "\n".join(text_lines)
+        return "目前沒有開放的場地。"
+
+    text_lines = ["📌 目前場地概況："]
+
+    for r in rows:
+        status = "🟢 開放" if r["is_open"] else "🔴 關閉 / 維護中"
+        text_lines.append(
+            f"• {r['name']}（容量 {r['capacity']} 人）\n"
+            f"  {status}\n"
+            f"  📄 備註：{r['remarks']}"
+        )
+
     cur.close()
     conn.close()
-    return text
+    return "\n".join(text_lines)
 
+# ---------- helper: 所有可預約時段 ----------
 def get_all_slots_text():
     conn = get_db_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    today = datetime.now().date()
 
     cur.execute("""
         SELECT s.venue_id, v.name AS venue_name, s.start_time, s.end_time
@@ -177,30 +194,32 @@ def get_all_slots_text():
         LEFT JOIN bookings b 
           ON s.venue_id = b.venue_id 
           AND s.start_time = b.start_time
-        WHERE s.start_time >= NOW() AND b.id IS NULL
+        WHERE s.start_time::date >= %s AND b.id IS NULL
         ORDER BY v.id, s.start_time;
-    """)
+    """, (today,))
     
     rows = cur.fetchall()
     if not rows:
-        text = "目前沒有可預約時段。"
-    else:
-        text_lines = ["📅 今日可預約時段總表："]
-        current_venue = None
-        for r in rows:
-            if r["venue_name"] != current_venue:
-                current_venue = r["venue_name"]
-                text_lines.append(f"\n🏟 {current_venue}")
-            text_lines.append(f" - {format_time(r['start_time'])} ～ {format_time(r['end_time'])}")
-        text = "\n".join(text_lines)
+        return "目前沒有可預約時段。"
+
+    text_lines = ["📅 今日可預約時段總表："]
+    current_venue = None
+
+    for r in rows:
+        if r["venue_name"] != current_venue:
+            current_venue = r["venue_name"]
+            text_lines.append(f"\n🏟 {current_venue}")
+        text_lines.append(f" - {format_time(r['start_time'])} ～ {format_time(r['end_time'])}")
 
     cur.close()
     conn.close()
-    return text
+    return "\n".join(text_lines)
 
+# ---------- helper: 指定場地時段 ----------
 def get_slots_text_for_venue(venue_id: int):
     conn = get_db_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    today = datetime.now().date()
 
     cur.execute("SELECT name FROM venues WHERE id = %s;", (venue_id,))
     v = cur.fetchone()
@@ -210,27 +229,28 @@ def get_slots_text_for_venue(venue_id: int):
         return "查無該場地。"
 
     venue_name = v["name"]
+
     cur.execute("""
         SELECT s.start_time, s.end_time
         FROM available_slots s
         LEFT JOIN bookings b
           ON s.venue_id = b.venue_id
           AND s.start_time = b.start_time
-        WHERE s.venue_id = %s AND s.start_time >= NOW() AND b.id IS NULL
+        WHERE s.venue_id = %s AND s.start_time::date >= %s AND b.id IS NULL
         ORDER BY s.start_time;
-    """, (venue_id,))
+    """, (venue_id, today))
+
     rows = cur.fetchall()
     if not rows:
-        text = f"🏟 {venue_name}\n目前沒有可預約時段。"
-    else:
-        lines = [f"🏟 {venue_name} - 目前可預約時段："]
-        for r in rows:
-            lines.append(f"• {format_time(r['start_time'])} ～ {format_time(r['end_time'])}")
-        text = "\n".join(lines)
+        return f"🏟 {venue_name}\n目前沒有可預約時段。"
+
+    lines = [f"🏟 {venue_name} - 可預約時段："]
+    for r in rows:
+        lines.append(f"• {format_time(r['start_time'])} ～ {format_time(r['end_time'])}")
 
     cur.close()
     conn.close()
-    return text
+    return "\n".join(lines)
 
 # ---------- health check ----------
 @router.get("/health")
