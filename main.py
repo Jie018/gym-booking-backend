@@ -30,7 +30,7 @@ app.include_router(cms.router)
 app.include_router(available_slots.router, prefix="/api")
 app.include_router(booking.router, prefix="/api")
 app.include_router(my_reservations.router, prefix="/api")
-app.include_router(line_router, prefix="/api/line")    # LINE Bot
+app.include_router(line_router)    # LINE Bot
 
 
 @app.get("/")
