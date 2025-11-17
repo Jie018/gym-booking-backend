@@ -6,7 +6,7 @@ import psycopg2
 import psycopg2.extras
 from linebot import LineBotApi, WebhookParser
 from linebot.exceptions import InvalidSignatureError
-from linebot.models import MessageEvent, TextMessage, TextSendMessage
+from linebot.models import MessageEvent, TextMessage, TextSendMessage, QuickReply, QuickReplyButton, MessageAction
 from datetime import datetime
 
 router = APIRouter()
@@ -30,6 +30,9 @@ if not (LINE_CHANNEL_SECRET and LINE_CHANNEL_ACCESS_TOKEN):
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 parser = WebhookParser(LINE_CHANNEL_SECRET)
 
+# ---------- 使用者暫存狀態 ----------
+user_state = {}  # user_id -> {"status": None, "selected_venue": None}
+
 # ---------- DB helper ----------
 def get_db_connection():
     conn = psycopg2.connect(
@@ -52,6 +55,16 @@ def format_time(dt):
         return dt.strftime("%H:%M")
     else:
         return str(dt)
+
+# ---------- helper: 取得所有場地 ----------
+def get_all_venues():
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cur.execute("SELECT id, name FROM venues ORDER BY id;")
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return [{"id": r["id"], "name": r["name"]} for r in rows]
 
 # ---------- API: 查詢目前有開放的場地 ----------
 @router.get("/api/opened_venues")
@@ -87,8 +100,8 @@ def api_available_slots(venue_id: int):
         cur.execute("""
             SELECT s.start_time, s.end_time
             FROM available_slots s
-            LEFT JOIN bookings b
-              ON s.venue_id = b.venue_id
+            LEFT JOIN bookings b 
+              ON s.venue_id = b.venue_id 
               AND s.start_time = b.start_time
             WHERE s.venue_id = %s AND s.start_time::date >= %s AND b.id IS NULL
             ORDER BY s.start_time;
@@ -118,20 +131,45 @@ async def callback(request: Request):
     for event in events:
         if event.type == "message" and event.message.type == "text":
             user_text = event.message.text.strip()
+            user_id = event.source.user_id
             reply_text = "請使用下方選單快速查詢：可預約時段 / 目前有開放的場地嗎"
 
+            # ---------- 可預約時段二段式 ----------
             if user_text == "可預約時段":
+                user_state[user_id] = {"status": "awaiting_venue_selection", "selected_venue": None}
+                venues = get_all_venues()
+                quick_buttons = [
+                    QuickReplyButton(action=MessageAction(label=v["name"], text=f"venue:{v['id']}"))
+                    for v in venues
+                ]
                 try:
-                    reply_text = get_all_slots_text()
+                    line_bot_api.reply_message(
+                        event.reply_token,
+                        TextSendMessage(
+                            text="請先選擇一個場地",
+                            quick_reply=QuickReply(items=quick_buttons)
+                        )
+                    )
                 except Exception as e:
-                    reply_text = f"查詢時發生錯誤：{e}"
+                    print("LINE reply error:", e)
+                continue
 
+            if user_state.get(user_id, {}).get("status") == "awaiting_venue_selection":
+                if user_text.startswith("venue:"):
+                    venue_id = int(user_text.split(":")[1])
+                    user_state[user_id]["status"] = "ready_to_show_slots"
+                    user_state[user_id]["selected_venue"] = venue_id
+                    reply_text = get_slots_text_for_venue(venue_id)
+                else:
+                    reply_text = "請選擇場地後再查詢可預約時段"
+
+            # ---------- 其他原有訊息 ----------
             elif user_text in ["目前有開放的場地嗎", "目前有開放的場地嗎?", "目前有開放的場地嗎？"] \
                     or "目前有開放的場地" in user_text:
-                    try:
-                        reply_text = get_open_venues_text()
-                    except Exception as e:
-                        reply_text = f"查詢時發生錯誤：{e}"
+                try:
+                    reply_text = get_open_venues_text()
+                except Exception as e:
+                    reply_text = f"查詢時發生錯誤：{e}"
 
             elif user_text.startswith("available:"):
                 try:
@@ -151,7 +189,7 @@ async def callback(request: Request):
 
     return "OK"
 
-# ---------- helper: 開放場地查詢（已新增資訊） ----------
+# ---------- helper: 開放場地查詢 ----------
 def get_open_venues_text():
     conn = get_db_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
@@ -171,11 +209,11 @@ def get_open_venues_text():
     text_lines = ["🔹 目前場地概況："]
 
     for r in rows:
-        status = "💚🌱 開放" if r["is_open"] else "❤️‍🩹🛠️ 關閉 / 維護中"
+        status = "✅  開放中" if r["is_open"] else "⛔  關閉 / 維護中"
         text_lines.append(
-            f"• {r['name']}（一場人數 {r['capacity']} 人）\n"
+            f"• {r['name']}（至多 {r['capacity']} 人）\n"
             f"  {status}\n"
-            f"  🧾 備註：{r['remarks']}"
+            f"  💬 備註：{r['remarks']}"
         )
 
     cur.close()
@@ -234,8 +272,8 @@ def get_slots_text_for_venue(venue_id: int):
     cur.execute("""
         SELECT s.start_time, s.end_time
         FROM available_slots s
-        LEFT JOIN bookings b
-          ON s.venue_id = b.venue_id
+        LEFT JOIN bookings b 
+          ON s.venue_id = b.venue_id 
           AND s.start_time = b.start_time
         WHERE s.venue_id = %s AND s.start_time::date >= %s AND b.id IS NULL
         ORDER BY s.start_time;
