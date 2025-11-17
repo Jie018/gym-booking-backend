@@ -7,6 +7,7 @@ from pydantic import BaseModel, validator
 from schemas import BookingOut
 from datetime import datetime
 import traceback
+from router.send_email import send_email
 
 router = APIRouter()
 
@@ -106,7 +107,29 @@ def create_booking(data: BookingCreate, db: Session = Depends(get_db)):
         db.add(new_b)
         db.commit()
         db.refresh(new_b)
+        # === 🔽 在這裡插入寄信功能 🔽 =====================
 
+        # 取得使用者 email
+        user = db.query(User).filter(User.id == data.user_id).first()
+        user_email = user.email
+
+        # 取得場地名稱
+        venue = db.query(Venue).filter(Venue.id == data.venue_id).first()
+        venue_name = venue.name
+
+        # 寄送預約成功通知
+        send_email(
+            to_email=user_email,
+            subject="體育館預約成功通知",
+            html_content=f"""
+                <h2>預約成功！</h2>
+                <p>您已成功預約 <strong>{venue_name}</strong></p>
+                <p>日期：{data.date}</p>
+                <p>時間：{data.time_slots[0]} - {data.time_slots[1]}</p>
+                <br/>
+                <p>請留意後續審核結果通知。</p>
+            """
+        )
         return {
             "success": True,
             "message": "預約成功",
@@ -188,6 +211,32 @@ def approve_booking(booking_id: int, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(booking)
 
+     # ✨ 在這裡加入 email 寄送
+    if not booking.user or not booking.user.email:
+        return {"message": "預約已通過，但使用者無 email 無法寄送通知"}
+
+    user_email = booking.user.email
+    venue_name = booking.venue.name
+    date = booking.start_time.date()
+    start = booking.start_time.strftime("%H:%M")
+    end = booking.end_time.strftime("%H:%M")
+
+    # 避免 email 失敗造成整個 API 壞掉
+    try:
+        send_email(
+            to_email=user_email,
+            subject="預約審核結果通知",
+            html_content=f"""
+                <h2>預約審核結果</h2>
+                <p>您的預約已被<strong>通過</strong></p>
+                <p>場地：{venue_name}</p>
+                <p>日期：{date}</p>
+                <p>時間：{start} - {end}</p>
+            """
+        )
+    except Exception as e:
+        print("❌ Email 寄送失敗:", e)
+
     return {"message": "預約已通過", "new_status": "已通過"}  # 回傳中文狀態
 
 
@@ -202,6 +251,31 @@ def reject_booking(booking_id: int, db: Session = Depends(get_db)):
     booking.status = BookingStatus.rejected
     db.commit()
     db.refresh(booking)
+    
+    # ✨ 在這裡加入 email 寄送
+    if not booking.user or not booking.user.email:
+        return {"message": "預約已拒絕，但使用者無 email 無法寄送通知"}
+
+    user_email = booking.user.email
+    venue_name = booking.venue.name
+    date = booking.start_time.date()
+    start = booking.start_time.strftime("%H:%M")
+    end = booking.end_time.strftime("%H:%M")
+
+    try:
+        send_email(
+            to_email=user_email,
+            subject="預約審核結果通知",
+            html_content=f"""
+                <h2>預約審核結果</h2>
+                <p>您的預約已被<strong>拒絕</strong></p>
+                <p>場地：{venue_name}</p>
+                <p>日期：{date}</p>
+                <p>時間：{start} - {end}</p>
+            """
+        )
+    except Exception as e:
+        print("❌ Email 寄送失敗:", e)
 
     return {"message": "預約已拒絕", "new_status": "已拒絕"}  # 回傳中文狀態
 
